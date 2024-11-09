@@ -28,7 +28,7 @@ check_env_vars() {
 
 docker_login() {
   echo "Logging into Docker registry..."
-  if ! aws --profile=gm ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"; then
+  if ! aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"; then
     echo "Error: Docker login failed."
     exit 1
   fi
