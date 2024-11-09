@@ -158,3 +158,5 @@ case "$1" in
     print_usage_error
     exit 1
     ;;
+esac
+
