@@ -70,12 +70,13 @@ EOF
 
 build_and_push_elastic_agent_image() {
   local tag="$1"
+  local image_name="elastic-agent"
   echo "Building and pushing elastic-agent image with tag ${tag}"
 
   docker buildx build --platform "$(IFS=,; echo "${platforms[*]}")" \
     --build-arg TAG="${tag}" \
     --file "Dockerfile.elastic-agent" \
-    --tag "${REGISTRY}/elastic/elastic-agent:${tag}" \
+    --tag "${REGISTRY}/elastic/${image_name}:${tag}" \
     --push \
     .
 }
@@ -83,12 +84,12 @@ build_and_push_elastic_agent_image() {
 build_and_push_image() {
   local image="$1"
   local tag="$2"
-  echo "Retagging and pushing ${image}:${tag} for platforms: ${platforms[*]}"
+  local image_name="${image##*/}"
 
   for platform in "${platforms[@]}"; do
     docker pull --platform "${platform}" "${image}:${tag}"
-    docker tag "${image}:${tag}" "${REGISTRY}/${image}:${tag}-${platform##*/}"
-    docker push "${REGISTRY}/${image}:${tag}-${platform##*/}"
+    docker tag "${image}:${tag}" "${REGISTRY}/${image_name}:${tag}-${platform##*/}"
+    docker push "${REGISTRY}/${image_name}:${tag}-${platform##*/}"
   done
 }
 
@@ -98,7 +99,6 @@ build_and_push_images() {
   for image_tags in "${images_tags_array[@]}"; do
     local image="${image_tags%%=*}"
     local tags="${image_tags#*=}"
-
     [[ "${image}" == "elastic/elastic-agent" ]] && prepare_elastic_agent_files
 
     IFS=',' read -ra tags_array <<< "${tags}"
@@ -118,13 +118,14 @@ push_manifests() {
   for image_tags in "${images_tags_array[@]}"; do
     local image="${image_tags%%=*}"
     local tags="${image_tags#*=}"
+    local image_name="${image##*/}"
     IFS=',' read -ra tags_array <<< "${tags}"
 
     for tag in "${tags_array[@]}"; do
-      echo "Pushing manifest for ${image}:${tag}..."
-      docker manifest create --amend "${REGISTRY}/${image}:${tag}" \
-        $(for arch in "${arches[@]}"; do echo "${REGISTRY}/${image}:${tag}-${arch}"; done)
-      docker manifest push "${REGISTRY}/${image}:${tag}"
+      echo "Pushing manifest for ${image_name}:${tag}..."
+      docker manifest create --amend "${REGISTRY}/${image_name}:${tag}" \
+        $(for arch in "${arches[@]}"; do echo "${REGISTRY}/${image_name}:${tag}-${arch}"; done)
+      docker manifest push "${REGISTRY}/${image_name}:${tag}"
     done
   done
 }
