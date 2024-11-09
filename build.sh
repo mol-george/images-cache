@@ -53,7 +53,7 @@ prepare_elastic_agent_files() {
     : "${!var:?Need to set $var}"
   done
 
-  if ! aws --profile=gm ssm get-parameter --name "${ES_CA_CERT}" --with-decryption --query 'Parameter.Value' --output text > "client-ca.crt"; then
+  if ! aws ssm get-parameter --name "${ES_CA_CERT}" --with-decryption --query 'Parameter.Value' --output text > "client-ca.crt"; then
     echo "Error: Failed to retrieve ES_CA_CERT from SSM."
     exit 1
   fi
