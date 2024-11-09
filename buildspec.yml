@@ -1,0 +1,22 @@
+version: 0.2
+
+env:
+  shell: bash
+  variables:
+    AWS_REGION: "eu-west-1"
+    REGISTRY: "566618458053.dkr.ecr.eu-west-1.amazonaws.com"
+    UPSTREAM_IMAGES_TAGS: "amazon/aws-for-fluent-bit=latest,init-latest,init-2.32.2.20241008 datadog/agent=latest elastic/elastic-agent=8.14.2,8.15.2 traefik=2.10.4,2.11.2,3.0.0,latest"
+    ES_CA_CERT: "my-certificate-secret"
+    CERT_FILE_PATH: "/usr/share/elastic-agent/certs/client-ca.crt"
+
+phases:
+  pre_build:
+    commands:
+      - chmod +x build.sh
+      - ./build.sh setup
+  build:
+    commands:
+      - ./build.sh build
+  post_build:
+    commands:
+      - ./build.sh push
