@@ -11,6 +11,7 @@ for os in "${oses[@]}"; do
     platforms+=("${os}/${arch}")
   done
 done
+echo "Platforms: ${platforms[*]}"
 
 temp_files=()
 cleanup() {
@@ -155,4 +156,3 @@ case "$1" in
     exit 1
     ;;
 esac
-build_elastic_agent_image
