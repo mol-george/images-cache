@@ -6,14 +6,11 @@ set -euo pipefail
 oses=("linux")
 arches=("amd64" "arm64")
 platforms=()
-
-generate_platforms() {
-  for os in "${oses[@]}"; do
-    for arch in "${arches[@]}"; do
-      platforms+=("${os}/${arch}")
-    done
+for os in "${oses[@]}"; do
+  for arch in "${arches[@]}"; do
+    platforms+=("${os}/${arch}")
   done
-}
+done
 
 temp_files=()
 cleanup() {
@@ -144,7 +141,6 @@ fi
 case "$1" in
   setup)
     check_env_vars
-    generate_platforms
     docker_login
     ;;
   build)
@@ -159,4 +155,3 @@ case "$1" in
     exit 1
     ;;
 esac
-
