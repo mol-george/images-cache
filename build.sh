@@ -68,7 +68,7 @@ EOF
   temp_files+=("Dockerfile.elastic-agent")
 }
 
-build_elastic_agent_image() {
+build_and_push_elastic_agent_image() {
   local tag="$1"
   echo "Building and pushing elastic-agent image with tag ${tag}"
 
@@ -80,7 +80,7 @@ build_elastic_agent_image() {
     .
 }
 
-build_image() {
+build_and_push_image() {
   local image="$1"
   local tag="$2"
   echo "Retagging and pushing ${image}:${tag} for platforms: ${platforms[*]}"
@@ -92,7 +92,7 @@ build_image() {
   done
 }
 
-build_images() {
+build_and_push_images() {
   IFS=' ' read -ra images_tags_array <<< "${UPSTREAM_IMAGES_TAGS}"
 
   for image_tags in "${images_tags_array[@]}"; do
@@ -104,9 +104,9 @@ build_images() {
     IFS=',' read -ra tags_array <<< "${tags}"
     for tag in "${tags_array[@]}"; do
       if [[ "${image}" == "elastic/elastic-agent" ]]; then
-        build_elastic_agent_image "${tag}"
+        build_and_push_elastic_agent_image "${tag}"
       else
-        build_image "${image}" "${tag}"
+        build_and_push_image "${image}" "${tag}"
       fi
     done
   done
@@ -145,7 +145,7 @@ case "$1" in
     ;;
   build)
     initialize_docker_buildx
-    build_images
+    build_and_push_images
     ;;
   push)
     push_manifests
