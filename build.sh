@@ -28,7 +28,7 @@ check_env_vars() {
 
 docker_login() {
   echo "Logging into Docker registry..."
-  if ! aws --profile=gm ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"; then
+  if ! aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"; then
     echo "Error: Docker login failed."
     exit 1
   fi
@@ -53,7 +53,7 @@ prepare_elastic_agent_files() {
     : "${!var:?Need to set $var}"
   done
 
-  if ! aws --profile=gm ssm get-parameter --name "${ES_CA_CERT}" --with-decryption --query 'Parameter.Value' --output text > "client-ca.crt"; then
+  if ! aws ssm get-parameter --name "${ES_CA_CERT}" --with-decryption --query 'Parameter.Value' --output text > "client-ca.crt"; then
     echo "Error: Failed to retrieve ES_CA_CERT from SSM."
     exit 1
   fi
