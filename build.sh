@@ -28,7 +28,7 @@ check_env_vars() {
 
 docker_login() {
   echo "Logging into Docker registry..."
-  if ! aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"; then
+  if ! aws --profile=gm ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"; then
     echo "Error: Docker login failed."
     exit 1
   fi
@@ -53,7 +53,7 @@ prepare_elastic_agent_files() {
     : "${!var:?Need to set $var}"
   done
 
-  if ! aws ssm get-parameter --name "${ES_CA_CERT}" --with-decryption --query 'Parameter.Value' --output text > "client-ca.crt"; then
+  if ! aws --profile=gm ssm get-parameter --name "${ES_CA_CERT}" --with-decryption --query 'Parameter.Value' --output text > "client-ca.crt"; then
     echo "Error: Failed to retrieve ES_CA_CERT from SSM."
     exit 1
   fi
@@ -68,7 +68,7 @@ EOF
   temp_files+=("Dockerfile.elastic-agent")
 }
 
-build_and_push_elastic_agent_image() {
+build_elastic_agent_image() {
   local tag="$1"
   echo "Building and pushing elastic-agent image with tag ${tag}"
 
@@ -76,13 +76,16 @@ build_and_push_elastic_agent_image() {
     docker buildx build --platform "${platform}" \
       --build-arg TAG="${tag}" \
       --file "Dockerfile.elastic-agent" \
+      --output type=docker \
+      --cache-to type=local,dest=/tmp \
+      --cache-from type=local,src=/tmp \
       --tag "${REGISTRY}/elastic/elastic-agent:${tag}-${platform##*/}" \
-      --push \
+      --load \
       .
   done
 }
 
-build_and_push_image() {
+build_image() {
   local image="$1"
   local tag="$2"
   echo "Retagging and pushing ${image}:${tag} for platforms: ${platforms[*]}"
@@ -90,11 +93,11 @@ build_and_push_image() {
   for platform in "${platforms[@]}"; do
     docker pull --platform "${platform}" "${image}:${tag}"
     docker tag "${image}:${tag}" "${REGISTRY}/${image}:${tag}-${platform##*/}"
-    docker push "${REGISTRY}/${image}:${tag}-${platform##*/}"
+    # docker push "${REGISTRY}/${image}:${tag}-${platform##*/}"
   done
 }
 
-build_and_push_images() {
+build_images() {
   IFS=' ' read -ra images_tags_array <<< "${UPSTREAM_IMAGES_TAGS}"
 
   for image_tags in "${images_tags_array[@]}"; do
@@ -106,15 +109,15 @@ build_and_push_images() {
     IFS=',' read -ra tags_array <<< "${tags}"
     for tag in "${tags_array[@]}"; do
       if [[ "${image}" == "elastic/elastic-agent" ]]; then
-        build_and_push_elastic_agent_image "${tag}"
+        build_elastic_agent_image "${tag}"
       else
-        build_and_push_image "${image}" "${tag}"
+        build_image "${image}" "${tag}"
       fi
     done
   done
 }
 
-push_manifests() {
+push_images_manifests() {
   IFS=' ' read -ra images_tags_array <<< "${UPSTREAM_IMAGES_TAGS}"
 
   for image_tags in "${images_tags_array[@]}"; do
@@ -123,6 +126,9 @@ push_manifests() {
     IFS=',' read -ra tags_array <<< "${tags}"
 
     for tag in "${tags_array[@]}"; do
+      docker push "${REGISTRY}/${image}:${tag}-amd64"
+      docker push "${REGISTRY}/${image}:${tag}-arm64"
+
       if [[ "${image}" == "elastic/elastic-agent" ]]; then
         docker manifest create --amend \
           "${REGISTRY}/${image}:${tag}-amd64" \
@@ -133,7 +139,6 @@ push_manifests() {
           "${REGISTRY}/${image}:${tag}-amd64" \
           "${REGISTRY}/${image}:${tag}-arm64"
       fi
-
       docker manifest push "${REGISTRY}/${image}:${tag}"
     done
   done
@@ -155,10 +160,10 @@ case "$1" in
     ;;
   build)
     initialize_docker_buildx
-    build_and_push_images
+    build_images
     ;;
   push)
-    push_manifests
+    push_images_manifests
     ;;
   *)
     print_usage_error
