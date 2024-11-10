@@ -118,20 +118,20 @@ push_manifests() {
   IFS=' ' read -ra images_tags_array <<< "${UPSTREAM_IMAGES_TAGS}"
 
   for image_tags in "${images_tags_array[@]}"; do
-    local image=$(cut -d'=' -f1<<<"${image_tags}")
-    local tags=$(cut -d'=' -f2<<<"${image_tags}")
+    local image=$(cut -d'=' -f1 <<< "${image_tags}")
+    local tags=$(cut -d'=' -f2 <<< "${image_tags}")
     IFS=',' read -ra tags_array <<< "${tags}"
 
     for tag in "${tags_array[@]}"; do
       if [[ "${image}" == "elastic/elastic-agent" ]]; then
         docker manifest create --amend \
-          "${REGISTRY}/${image}:${tag}-linux/amd64" \
-          "${REGISTRY}/${image}:${tag}-linux/arm64"
+          "${REGISTRY}/${image}:${tag}-amd64" \
+          "${REGISTRY}/${image}:${tag}-arm64"
       else
         docker manifest create --amend \
           "${REGISTRY}/${image}:${tag}" \
-          "${REGISTRY}/${image}:${tag}-linux/amd64" \
-          "${REGISTRY}/${image}:${tag}-linux/arm64"
+          "${REGISTRY}/${image}:${tag}-amd64" \
+          "${REGISTRY}/${image}:${tag}-arm64"
       fi
 
       docker manifest push "${REGISTRY}/${image}:${tag}"
