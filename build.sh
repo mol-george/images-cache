@@ -11,7 +11,6 @@ for os in "${oses[@]}"; do
     platforms+=("${os}/${arch}")
   done
 done
-echo "Platforms: ${platforms[*]}"
 
 temp_files=()
 cleanup() {
@@ -73,12 +72,14 @@ build_and_push_elastic_agent_image() {
   local tag="$1"
   echo "Building and pushing elastic-agent image with tag ${tag}"
 
-  docker buildx build --platform "$(IFS=,; echo "${platforms[*]}")" \
-    --build-arg TAG="${tag}" \
-    --file "Dockerfile.elastic-agent" \
-    --tag "${REGISTRY}/elastic/elastic-agent:${tag}" \
-    --push \
-    .
+  for platform in "${platforms[@]}"; do
+    docker buildx build --platform "${platform}" \
+      --build-arg TAG="${tag}" \
+      --file "Dockerfile.elastic-agent" \
+      --tag "${REGISTRY}/elastic/elastic-agent:${tag}-${platform##*/}" \
+      --push \
+      .
+  done
 }
 
 build_and_push_image() {
