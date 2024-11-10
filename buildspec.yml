@@ -12,11 +12,11 @@ env:
 phases:
   pre_build:
     commands:
-      - chmod +x build.sh
-      - ./build.sh setup
+      - chmod +x cache-images.sh
+      - ./cache-images.sh setup
   build:
     commands:
-      - ./build.sh build
+      - ./cache-images.sh build
   post_build:
     commands:
-      - ./build.sh push
+      - ./cache-images.sh push
