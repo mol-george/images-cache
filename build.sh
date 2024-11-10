@@ -118,14 +118,16 @@ push_manifests() {
   IFS=' ' read -ra images_tags_array <<< "${UPSTREAM_IMAGES_TAGS}"
 
   for image_tags in "${images_tags_array[@]}"; do
-    local image="${image_tags%%=*}"
+    local image=$(cut -d'=' -f1<<<"${image_tags}")
     local tags=$(cut -d'=' -f2<<<"${image_tags}")
     IFS=',' read -ra tags_array <<< "${tags}"
 
     for tag in "${tags_array[@]}"; do
-      echo "Pushing manifest for ${image}:${tag}..."
-      docker manifest create --amend "${REGISTRY}/${image}:${tag}" \
-        $(for arch in "${arches[@]}"; do echo "${REGISTRY}/${image}:${tag}-${arch}"; done)
+      docker manifest create --amend \
+        "${REGISTRY}/${image}:${tag}" \
+        "${REGISTRY}/${image}:${tag}-amd64" \
+        "${REGISTRY}/${image}:${tag}-arm64"
+
       docker manifest push "${REGISTRY}/${image}:${tag}"
     done
   done
