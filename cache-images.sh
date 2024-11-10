@@ -2,18 +2,14 @@
 
 set -euo pipefail
 
-# Define OSes and architectures
+temp_files=()
 oses=("linux")
 arches=("amd64" "arm64")
 platforms=()
-for os in "${oses[@]}"; do
-  for arch in "${arches[@]}"; do
-    platforms+=("${os}/${arch}")
-  done
-done
+declare -A image_tags
 
-temp_files=()
 cleanup() {
+  echo "Cleaning up temporary files..."
   if [[ ${#temp_files[@]} -gt 0 ]]; then
     rm -f "${temp_files[@]}"
   fi
@@ -21,14 +17,30 @@ cleanup() {
 trap cleanup EXIT
 
 check_env_vars() {
+  echo "Checking environment variables..."
   for var in AWS_REGION REGISTRY UPSTREAM_IMAGES_TAGS; do
     : "${!var:?Need to set $var}"
   done
 }
 
+build_data_structures() {
+  echo "Building data structures..."
+  for os in "${oses[@]}"; do
+    for arch in "${arches[@]}"; do
+      platforms+=("${os}/${arch}")
+    done
+  done
+
+  for entry in ${UPSTREAM_IMAGES_TAGS}; do
+    IFS='=' read -r image tags <<< "${entry}"
+    IFS=',' read -ra tags_array <<< "${tags}"
+    image_tags["$image"]="${tags_array[@]}"
+  done
+}
+
 docker_login() {
   echo "Logging into Docker registry..."
-  if ! aws --profile=gm ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"; then
+  if ! aws ecr get-login-password --region "${AWS_REGION}" | docker login --username AWS --password-stdin "${REGISTRY}"  >/dev/null; then
     echo "Error: Docker login failed."
     exit 1
   fi
@@ -39,13 +51,14 @@ initialize_docker_buildx() {
   local builder_name="multiarch-builder"
 
   if ! docker buildx inspect "${builder_name}" >/dev/null 2>&1; then
-    docker buildx create --name "${builder_name}" --driver docker-container --use
+    docker buildx create --name "${builder_name}" --driver docker-container --use >/dev/null
   else
-    docker buildx use "${builder_name}"
+    docker buildx use "${builder_name}" >/dev/null
   fi
 
-  docker buildx inspect --bootstrap
+  docker buildx inspect --bootstrap >/dev/null
 }
+
 
 prepare_elastic_agent_files() {
   echo "Preparing files for elastic-agent Docker build..."
@@ -156,11 +169,13 @@ fi
 case "$1" in
   setup)
     check_env_vars
+    build_data_structures
     docker_login
+    initialize_docker_buildx
     ;;
   build)
-    initialize_docker_buildx
-    build_images
+    # initialize_docker_buildx
+    # build_images
     ;;
   push)
     push_images_manifests
