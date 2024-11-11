@@ -6,7 +6,7 @@ temp_files=()
 oses=("linux")
 arches=("amd64" "arm64")
 platforms=()
-declare -A image_tags
+declare -A images_tags
 
 cleanup() {
   echo "Cleaning up temporary files..."
@@ -34,7 +34,7 @@ build_data_structures() {
   for entry in ${UPSTREAM_IMAGES_TAGS}; do
     IFS='=' read -r image tags <<< "${entry}"
     IFS=',' read -ra tags_array <<< "${tags}"
-    image_tags["$image"]="${tags_array[@]}"
+    images_tags["$image"]="${tags_array[@]}"
   done
 }
 
@@ -59,14 +59,13 @@ initialize_docker_buildx() {
   docker buildx inspect --bootstrap >/dev/null
 }
 
-
 prepare_elastic_agent_files() {
-  echo "Preparing files for elastic-agent Docker build..."
+  echo "Preparing files for elastic-agent image..."
   for var in ES_CA_CERT CERT_FILE_PATH; do
     : "${!var:?Need to set $var}"
   done
 
-  if ! aws --profile=gm ssm get-parameter --name "${ES_CA_CERT}" --with-decryption --query 'Parameter.Value' --output text > "client-ca.crt"; then
+  if ! aws ssm get-parameter --name "${ES_CA_CERT}" --with-decryption --query 'Parameter.Value' --output text > "client-ca.crt"; then
     echo "Error: Failed to retrieve ES_CA_CERT from SSM."
     exit 1
   fi
@@ -82,14 +81,13 @@ EOF
 }
 
 build_elastic_agent_image() {
-  local tag="$1"
   echo "Building and pushing elastic-agent image with tag ${tag}"
+  local tag="$1"
 
   for platform in "${platforms[@]}"; do
     docker buildx build --platform "${platform}" \
       --build-arg TAG="${tag}" \
       --file "Dockerfile.elastic-agent" \
-      --output type=docker \
       --cache-to type=local,dest=/tmp \
       --cache-from type=local,src=/tmp \
       --tag "${REGISTRY}/elastic/elastic-agent:${tag}-${platform##*/}" \
@@ -101,87 +99,83 @@ build_elastic_agent_image() {
 build_image() {
   local image="$1"
   local tag="$2"
-  echo "Retagging and pushing ${image}:${tag} for platforms: ${platforms[*]}"
 
   for platform in "${platforms[@]}"; do
+    echo "Pulling and tagging ${image}:${tag} for platform ${platform}..."
     docker pull --platform "${platform}" "${image}:${tag}"
     docker tag "${image}:${tag}" "${REGISTRY}/${image}:${tag}-${platform##*/}"
-    # docker push "${REGISTRY}/${image}:${tag}-${platform##*/}"
   done
 }
 
 build_images() {
-  IFS=' ' read -ra images_tags_array <<< "${UPSTREAM_IMAGES_TAGS}"
-
-  for image_tags in "${images_tags_array[@]}"; do
-    local image=$(cut -d'=' -f1<<<"${image_tags}")
-    local tags=$(cut -d'=' -f2<<<"${image_tags}")
-
-    [[ "${image}" == "elastic/elastic-agent" ]] && prepare_elastic_agent_files
-
-    IFS=',' read -ra tags_array <<< "${tags}"
-    for tag in "${tags_array[@]}"; do
-      if [[ "${image}" == "elastic/elastic-agent" ]]; then
+  echo "Building images..."
+  for image in "${!images_tags[@]}"; do
+    if [[ "${image}" == "elastic/elastic-agent" ]]; then
+      prepare_elastic_agent_files
+      for tag in ${images_tags["$image"]}; do
         build_elastic_agent_image "${tag}"
-      else
+      done
+    else
+      for tag in ${images_tags["$image"]}; do
         build_image "${image}" "${tag}"
-      fi
+      done
+    fi
+  done
+}
+
+push_images() {
+  for image in "${!images_tags[@]}"; do
+    for tag in ${images_tags["$image"]}; do
+      for platform in "${platforms[@]}"; do
+        docker push "${REGISTRY}/${image}:${tag}-${platform##*/}"
+      done
     done
   done
 }
 
-push_images_manifests() {
-  IFS=' ' read -ra images_tags_array <<< "${UPSTREAM_IMAGES_TAGS}"
-
-  for image_tags in "${images_tags_array[@]}"; do
-    local image=$(cut -d'=' -f1 <<< "${image_tags}")
-    local tags=$(cut -d'=' -f2 <<< "${image_tags}")
-    IFS=',' read -ra tags_array <<< "${tags}"
-
-    for tag in "${tags_array[@]}"; do
-      docker push "${REGISTRY}/${image}:${tag}-amd64"
-      docker push "${REGISTRY}/${image}:${tag}-arm64"
-
-      if [[ "${image}" == "elastic/elastic-agent" ]]; then
-        docker manifest create --amend \
-          "${REGISTRY}/${image}:${tag}-amd64" \
-          "${REGISTRY}/${image}:${tag}-arm64"
-      else
-        docker manifest create --amend \
-          "${REGISTRY}/${image}:${tag}" \
-          "${REGISTRY}/${image}:${tag}-amd64" \
-          "${REGISTRY}/${image}:${tag}-arm64"
-      fi
+push_manifests() {
+  for image in "${!images_tags[@]}"; do
+    for tag in ${images_tags["$image"]}; do
+      docker manifest rm "${REGISTRY}/${image}:${tag}" || true
+      docker manifest create --amend "${REGISTRY}/${image}:${tag}" $(for platform in "${platforms[@]}"; do echo "${REGISTRY}/${image}:${tag}-${platform##*/}"; done)
       docker manifest push "${REGISTRY}/${image}:${tag}"
     done
   done
 }
 
-print_usage_error() {
-  echo "Error: Invalid or missing argument. Please specify 'setup', 'build', or 'push'."
-}
+check_env_vars
+build_data_structures
+docker_login
+initialize_docker_buildx
+build_images
+push_images
+push_manifests
 
-if [[ $# -eq 0 ]]; then
-  print_usage_error
-  exit 1
-fi
+# print_usage_error() {
+#   echo "Error: Invalid or missing argument. Please specify 'setup', 'build', or 'push'."
+# }
 
-case "$1" in
-  setup)
-    check_env_vars
-    build_data_structures
-    docker_login
-    initialize_docker_buildx
-    ;;
-  build)
-    # initialize_docker_buildx
-    # build_images
-    ;;
-  push)
-    push_images_manifests
-    ;;
-  *)
-    print_usage_error
-    exit 1
-    ;;
-esac
+# if [[ $# -eq 0 ]]; then
+#   print_usage_error
+#   exit 1
+# fi
+
+# case "$1" in
+#   setup)
+#     check_env_vars
+#     build_data_structures
+#     docker_login
+#     initialize_docker_buildx
+#     build_images
+#     ;;
+#   build)
+#     # build_images
+#     ;;
+#   push)
+#     push_manifests
+#     ;;
+#   *)
+#     print_usage_error
+#     exit 1
+#     ;;
+# esac
