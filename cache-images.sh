@@ -14,7 +14,6 @@ cleanup() {
     rm -f "${temp_files[@]}"
   fi
 }
-trap cleanup EXIT
 
 check_env_vars() {
   echo "Checking environment variables..."
@@ -124,6 +123,7 @@ build_images() {
 }
 
 push_images() {
+  echo "Pushing images..."
   for image in "${!images_tags[@]}"; do
     for tag in ${images_tags["$image"]}; do
       for platform in "${platforms[@]}"; do
@@ -134,6 +134,7 @@ push_images() {
 }
 
 push_manifests() {
+  echo "Pushing manifests..."
   for image in "${!images_tags[@]}"; do
     for tag in ${images_tags["$image"]}; do
       docker manifest rm "${REGISTRY}/${image}:${tag}" || true
@@ -143,39 +144,33 @@ push_manifests() {
   done
 }
 
-check_env_vars
-build_data_structures
-docker_login
-initialize_docker_buildx
-build_images
-push_images
-push_manifests
+print_usage_error() {
+  echo "Error: Invalid or missing argument. Please specify 'setup', 'build', or 'push'."
+}
 
-# print_usage_error() {
-#   echo "Error: Invalid or missing argument. Please specify 'setup', 'build', or 'push'."
-# }
+if [[ $# -eq 0 ]]; then
+  print_usage_error
+  exit 1
+fi
 
-# if [[ $# -eq 0 ]]; then
-#   print_usage_error
-#   exit 1
-# fi
-
-# case "$1" in
-#   setup)
-#     check_env_vars
-#     build_data_structures
-#     docker_login
-#     initialize_docker_buildx
-#     build_images
-#     ;;
-#   build)
-#     # build_images
-#     ;;
-#   push)
-#     push_manifests
-#     ;;
-#   *)
-#     print_usage_error
-#     exit 1
-#     ;;
-# esac
+case "$1" in
+  setup)
+    check_env_vars
+    docker_login
+    initialize_docker_buildx
+    ;;
+  build)
+    build_data_structures
+    build_images
+    cleanup
+    ;;
+  push)
+    build_data_structures
+    push_images
+    push_manifests
+    ;;
+  *)
+    print_usage_error
+    exit 1
+    ;;
+esac
